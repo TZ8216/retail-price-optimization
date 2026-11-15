@@ -1,0 +1,153 @@
+---
+title: "Retail Price Optimization"
+output: html_document
+date: "2026-11-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+
+# 1. 读取并清洗数据
+retail <- read.csv("~/Desktop/retail-price-optimization/retail_price.csv")
+
+retail_clean <- retail %>%
+  mutate(min_comp_price = pmin(comp_1, comp_2, comp_3, na.rm = TRUE)) %>%
+  filter(
+    !is.na(qty), qty > 0,
+    !is.na(unit_price), unit_price > 0,
+    !is.na(min_comp_price), min_comp_price > 0,
+    !is.na(customers), customers > 0
+  )
+
+# 2. 定义单个 SKU 的 Bootstrap 95% 置信区间函数
+calc_bootstrap_ci <- function(df_sub, p_curr, p_rec, q_base, n_boot = 2000) {
+  if (nrow(df_sub) < 5) {
+    return(c(NA, NA))
+  }
+  set.seed(42)
+  rev_curr <- p_curr * q_base
+
+  boot_gains <- replicate(n_boot, {
+    idx <- sample(1:nrow(df_sub), size = nrow(df_sub), replace = TRUE)
+    boot_df <- df_sub[idx, ]
+
+    # 抽样后单价或竞品价没有波动则跳过
+    if (length(unique(boot_df$unit_price)) < 2) {
+      return(NA)
+    }
+    if (length(unique(boot_df$min_comp_price)) < 2) {
+      return(NA)
+    }
+
+    m <- tryCatch(
+      lm(log(qty) ~ log(unit_price) + log(min_comp_price) + log(customers), data = boot_df),
+      error = function(e) NULL
+    )
+    if (is.null(m)) {
+      return(NA)
+    }
+
+    b_boot <- coef(m)["log(unit_price)"]
+    if (is.na(b_boot)) {
+      return(NA)
+    }
+
+    q_new <- q_base * (p_rec / p_curr)^b_boot
+    (p_rec * q_new) - rev_curr
+  })
+
+  boot_gains <- boot_gains[!is.na(boot_gains)]
+  if (length(boot_gains) < 100) {
+    return(c(NA, NA))
+  }
+
+  as.numeric(quantile(boot_gains, probs = c(0.025, 0.975)))
+}
+
+# 3. 逐个商品计算弹性、推荐价格和置信区间
+products <- unique(retail_clean$product_id)
+results_list <- list()
+
+for (pid in products) {
+  df_sub <- retail_clean %>% filter(product_id == pid)
+  if (nrow(df_sub) < 5) {
+    next
+  }
+
+  # 拟合需求弹性模型
+  model <- tryCatch(
+    lm(log(qty) ~ log(unit_price) + log(min_comp_price) + log(customers), data = df_sub),
+    error = function(e) NULL
+  )
+  if (is.null(model)) {
+    next
+  }
+
+  coef_table <- summary(model)$coefficients
+  if (!("log(unit_price)" %in% rownames(coef_table))) {
+    next
+  }
+
+  elasticity      <- coef_table["log(unit_price)", "Estimate"]
+  pval_elasticity <- coef_table["log(unit_price)", "Pr(>|t|)"]
+  if (is.na(elasticity)) {
+    next
+  }
+
+  # 当前基准价格与销量
+  current_price <- mean(df_sub$unit_price, na.rm = TRUE)
+  current_qty   <- mean(df_sub$qty, na.rm = TRUE)
+
+  # 在当前价格上下 20% 范围内寻找预期营收最高的价格作为推荐价
+  price_grid        <- seq(current_price * 0.8, current_price * 1.2, length.out = 50)
+  expected_revs     <- price_grid * current_qty * (price_grid / current_price)^elasticity
+  recommended_price <- price_grid[which.max(expected_revs)]
+
+  # 计算预期变化与竞品中位价
+  expected_qty       <- current_qty * (recommended_price / current_price)^elasticity
+  demand_change_pct  <- ((expected_qty - current_qty) / current_qty) * 100
+  current_revenue    <- current_price * current_qty
+  expected_revenue   <- recommended_price * expected_qty
+  revenue_diff       <- expected_revenue - current_revenue
+  revenue_change_pct <- (revenue_diff / current_revenue) * 100
+  comp_price         <- median(df_sub$min_comp_price, na.rm = TRUE)
+
+  # 计算 Bootstrap 置信区间
+  ci      <- calc_bootstrap_ci(df_sub, current_price, recommended_price, current_qty, n_boot = 2000)
+  ci_low  <- round(ci[1], 0)
+  ci_high <- round(ci[2], 0)
+
+  # 自动生成风险标签
+  risk_level <- case_when(
+    !is.na(ci_low) & ci_low > 0 & pval_elasticity < 0.05 ~ "Low Risk",
+    !is.na(ci_low) & ci_low > 0                          ~ "Moderate Risk",
+    TRUE                                                 ~ "High Risk"
+  )
+
+  results_list[[as.character(pid)]] <- data.frame(
+    product_id         = pid,
+    current_price      = round(current_price, 2),
+    recommended_price  = round(recommended_price, 2),
+    elasticity         = round(elasticity, 3),
+    pval_elasticity    = round(pval_elasticity, 4),
+    current_qty        = round(current_qty, 1),
+    expected_qty       = round(expected_qty, 1),
+    demand_change_pct  = round(demand_change_pct, 2),
+    current_revenue    = round(current_revenue, 2),
+    expected_revenue   = round(expected_revenue, 2),
+    revenue_diff       = round(revenue_diff, 2),
+    revenue_change_pct = round(revenue_change_pct, 2),
+    comp_price         = round(comp_price, 2),
+    ci_low             = ci_low,
+    ci_high            = ci_high,
+    risk_level         = risk_level
+  )
+}
+
+final_dashboard_data <- bind_rows(results_list)
+head(final_dashboard_data)
+```
