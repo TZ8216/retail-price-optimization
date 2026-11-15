@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retail Price Optimization · Interactive Dashboard</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #F8FAFC;
+      color: #0F172A;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    /* Custom thin scrollbar for product list */
+    .sku-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .sku-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .sku-scroll::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 9999px;
+    }
+    .sku-scroll::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
+    /* Custom Range Slider */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 8px;
+      border-radius: 9999px;
+      background: #E2E8F0;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #2563EB;
+      border: 3px solid #FFFFFF;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
+      cursor: pointer;
+      transition: transform 0.12s ease, background-color 0.12s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+      background: #1D4ED8;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #2563EB;
+      border: 3px solid #FFFFFF;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased">
+
+  <!-- 1. Top Navigation Bar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <!-- Brand Title & Subtitle -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 17l6-6 4 4 8-8M14 7h7v7" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 leading-tight">
+            Retail Price Optimization
+          </h1>
+          <p class="text-xs text-slate-500">
+            Elasticity-Driven Pricing &amp; Bootstrap Validation · Kaggle Retail Dataset
+          </p>
+        </div>
+      </div>
+
+      <!-- Right Controls: Segmented View Toggle + Reset to Optimal -->
+      <div class="flex items-center gap-2.5 self-start sm:self-auto">
+        <div class="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200" role="group" aria-label="View Mode">
+          <button
+            id="btnBusinessView"
+            type="button"
+            onclick="setViewMode('business')"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-900 shadow-sm cursor-pointer"
+          >
+            Business View
+          </button>
+          <button
+            id="btnModelView"
+            type="button"
+            onclick="setViewMode('model')"
+            class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 hover:text-slate-900 cursor-pointer"
+          >
+            R Model Details
+          </button>
+        </div>
+
+        <button
+          id="btnTopReset"
+          type="button"
+          onclick="resetToOptimal()"
+          class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200/80 transition-colors cursor-pointer"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0114.65-3.35L20 7M20 15a9 9 0 01-14.65 3.35L4 17" />
+          </svg>
+          Reset to Optimal
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 2. Two-Column Main Layout (max-width 1400px) -->
+  <div class="max-w-[1400px] w-full mx-auto px-4 sm:px-6 py-5 flex-1 flex flex-col lg:flex-row gap-5">
+
+    <!-- LEFT SIDEBAR: 340px fixed on desktop -->
+    <aside class="w-full lg:w-[340px] shrink-0 bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden lg:max-h-[calc(100vh-108px)] lg:sticky lg:top-[84px]">
+      <!-- Sidebar Header & Strategy Filter Pills -->
+      <div class="p-4 border-b border-slate-200 bg-slate-50/60">
+        <div class="flex items-center justify-between mb-2.5">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-700">
+            Select Product (One-Click)
+          </h2>
+          <span class="text-[11px] font-medium text-slate-400">Kaggle SKUs</span>
+        </div>
+
+        <!-- Strategy Filter Pills -->
+        <div class="flex items-center gap-1.5" role="group" aria-label="Filter by pricing strategy">
+          <button
+            id="filterAll"
+            type="button"
+            onclick="setStrategyFilter('all')"
+            class="flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all bg-blue-600 text-white shadow-xs cursor-pointer"
+          >
+            All (12)
+          </button>
+          <button
+            id="filterElastic"
+            type="button"
+            onclick="setStrategyFilter('elastic')"
+            class="flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 cursor-pointer"
+          >
+            Cut Price (11)
+          </button>
+          <button
+            id="filterInelastic"
+            type="button"
+            onclick="setStrategyFilter('inelastic')"
+            class="flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 cursor-pointer"
+          >
+            Raise Price (1)
+          </button>
+        </div>
+      </div>
+
+      <!-- Scrollable List of Single-Click Product Cards -->
+      <div id="skuListContainer" class="p-3 space-y-2 overflow-y-auto sku-scroll max-h-[380px] lg:max-h-none flex-1">
+        <!-- Populated dynamically via JS -->
+      </div>
+    </aside>
+
+    <!-- RIGHT WORKSPACE: Flexible Main Decision Area -->
+    <main class="flex-1 min-w-0 flex flex-col gap-4">
+
+      <!-- Row 1: Executive Summary Header -->
+      <section class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2.5">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h2 id="execSkuTitle" class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900">
+              bed1
+            </h2>
+            <span id="execCategoryTag" class="px-2.5 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+              bed_bath_table
+            </span>
+            <span id="execStrategyBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+              Cut Price -15%
+            </span>
+          </div>
+
+          <span id="execRiskBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 tabular-nums">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            Low Risk · 99.8% Win Prob
+          </span>
+        </div>
+
+        <p id="execActionSentence" class="text-sm text-slate-600 mt-2.5 leading-relaxed">
+          Cut price by 15.0% from $39.99 to $33.99 to capture price-sensitive shoppers—projected volume rises +123.5% for +$251.84/mo in net revenue.
+        </p>
+      </section>
+
+      <!-- Row 2: 4 KPI Metric Cards -->
+      <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
+        <!-- KPI 1: Current Price -->
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>Current Price</span>
+            <span class="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+              </svg>
+            </span>
+          </div>
+          <div id="kpiCurrentPrice" class="text-2xl font-extrabold text-slate-900 tabular-nums mt-2">
+            $39.99
+          </div>
+          <div id="kpiCompSubtext" class="text-xs text-slate-500 tabular-nums mt-1">
+            Lowest competitor: $39.99
+          </div>
+        </div>
+
+        <!-- KPI 2: Recommended Price -->
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>Recommended Price</span>
+            <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </span>
+          </div>
+          <div id="kpiRecPrice" class="text-2xl font-extrabold text-blue-600 tabular-nums mt-2">
+            $33.99
+          </div>
+          <div id="kpiRecSubtext" class="text-xs text-slate-500 tabular-nums mt-1">
+            -15.0% within ±15% guardrail
+          </div>
+        </div>
+
+        <!-- KPI 3: Estimated Demand Change -->
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>Estimated Demand Change</span>
+            <span class="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+            </span>
+          </div>
+          <div id="kpiDemandChange" class="text-xl xl:text-[21px] font-extrabold text-slate-900 tabular-nums mt-2 leading-tight">
+            7.0 → 15.6 units/mo
+          </div>
+          <div id="kpiDemandSubtext" class="text-xs text-slate-500 tabular-nums mt-1">
+            +123.5% projected volume
+          </div>
+        </div>
+
+        <!-- KPI 4: Expected Revenue Impact -->
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>Expected Revenue Impact</span>
+            <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </span>
+          </div>
+          <div id="kpiRevImpact" class="text-2xl font-extrabold text-emerald-600 tabular-nums mt-2">
+            +$251.84 / mo
+          </div>
+          <div id="kpiRevSubtext" class="text-xs font-medium text-emerald-700 tabular-nums mt-1">
+            +90.0% monthly lift
+          </div>
+        </div>
+      </section>
+
+      <!-- Row 3: Two-Column Interactive Cards -->
+      <section class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+        <!-- Left Card: ±15% Risk-Bounded Price Simulator -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <div class="flex items-start justify-between gap-2 pb-3.5 border-b border-slate-100">
+              <div>
+                <h3 class="text-sm font-bold text-slate-900">±15% Risk-Bounded Price Simulator</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Test unit prices inside the ±15% churn-protection boundary</p>
+              </div>
+              <span id="simElasticityPill" class="px-2 py-0.5 rounded-md text-[11px] font-mono-code font-semibold bg-slate-100 text-slate-700 shrink-0">
+                b = -4.95
+              </span>
+            </div>
+
+            <!-- Live Price & Quick-Snap Pills -->
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-baseline gap-2">
+                <span id="simLivePrice" class="text-2xl font-extrabold text-blue-600 tabular-nums">$33.99</span>
+                <span id="simLivePctBadge" class="px-2 py-0.5 rounded-md text-xs font-bold tabular-nums bg-blue-50 text-blue-700">
+                  -15.0%
+                </span>
+              </div>
+
+              <div class="flex items-center gap-1.5">
+                <button
+                  id="btnSnapCurrent"
+                  type="button"
+                  onclick="snapToCurrent()"
+                  class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                >
+                  Current Price (0%)
+                </button>
+                <button
+                  id="btnSnapRecommended"
+                  type="button"
+                  onclick="resetToOptimal()"
+                  class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/70 transition-colors cursor-pointer"
+                >
+                  Model Recommended (-15%)
+                </button>
+              </div>
+            </div>
+
+            <!-- Slider Input -->
+            <div class="mt-3.5">
+              <input
+                id="priceSlider"
+                type="range"
+                class="w-full cursor-pointer"
+                oninput="onSliderChange(this.value)"
+              />
+              <div class="flex justify-between text-[11px] font-medium text-slate-400 tabular-nums mt-1.5">
+                <span id="sliderMinText">-15% ($33.99)</span>
+                <span id="sliderMidText">Current ($39.99)</span>
+                <span id="sliderMaxText">+15% ($45.99)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Clean Horizontal Comparison Bars -->
+          <div class="mt-5 pt-4 border-t border-slate-100 space-y-3.5">
+            <!-- Bar 1: Current Monthly Revenue -->
+            <div>
+              <div class="flex justify-between items-baseline text-xs mb-1.5">
+                <span class="font-medium text-slate-600">Current Monthly Revenue</span>
+                <span id="barCurrRevLabel" class="font-bold text-slate-700 tabular-nums">$279.93 / mo</span>
+              </div>
+              <div class="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden">
+                <div id="barCurrRevFill" class="h-full bg-slate-400 rounded-full transition-all duration-200" style="width: 52%;"></div>
+              </div>
+            </div>
+
+            <!-- Bar 2: Simulated Monthly Revenue -->
+            <div>
+              <div class="flex justify-between items-baseline text-xs mb-1.5 gap-2">
+                <span class="font-semibold text-slate-900">Simulated Monthly Revenue</span>
+                <div class="flex items-center gap-1.5 tabular-nums">
+                  <span id="barSimRevLabel" class="font-bold text-slate-900">$531.77 / mo</span>
+                  <span id="barSimPctBadge" class="px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700">
+                    +90.0%
+                  </span>
+                </div>
+              </div>
+              <div class="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden">
+                <div id="barSimRevFill" class="h-full bg-emerald-600 rounded-full transition-all duration-200" style="width: 92%;"></div>
+              </div>
+            </div>
+
+            <!-- Live Volume Readout -->
+            <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1 tabular-nums">
+              <span>Simulated Monthly Demand:</span>
+              <span id="simLiveDemandText" class="font-semibold text-slate-700">15.6 units/mo (+123.5%)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Card: 95% Bootstrap Confidence Range (Plain-English Risk Gauge) -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <div class="flex items-start justify-between gap-2 pb-3.5 border-b border-slate-100">
+              <div>
+                <h3 class="text-sm font-bold text-slate-900">95% Bootstrap Confidence Range</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Plain-English Risk Gauge · 1,000 SKU Bootstrap Resamples</p>
+              </div>
+              <span id="ciWinProbPill" class="px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                99.8% Win Prob
+              </span>
+            </div>
+
+            <!-- Key Percentile Readouts -->
+            <div class="grid grid-cols-3 gap-2 mt-4 bg-slate-50/80 p-3 rounded-xl border border-slate-100 tabular-nums">
+              <div>
+                <div class="text-[11px] font-medium text-slate-500">Conservative (2.5%)</div>
+                <div id="ciFloorVal" class="text-sm font-bold text-emerald-700 mt-0.5">+$104.68</div>
+              </div>
+              <div class="text-center border-x border-slate-200/80 px-1">
+                <div class="text-[11px] font-medium text-slate-500">Expected Gain</div>
+                <div id="ciExpectedVal" class="text-sm font-extrabold text-slate-900 mt-0.5">+$251.84</div>
+              </div>
+              <div class="text-right">
+                <div class="text-[11px] font-medium text-slate-500">Upside (97.5%)</div>
+                <div id="ciCeilingVal" class="text-sm font-bold text-emerald-700 mt-0.5">+$476.73</div>
+              </div>
+            </div>
+
+            <!-- Horizontal Range Gauge Relative to $0 Break-Even -->
+            <div class="mt-4 pt-4 pb-1">
+              <!-- Top Floating Labels -->
+              <div class="relative h-5 text-[11px] font-bold tabular-nums">
+                <span id="gaugeZeroLabel" class="absolute -translate-x-1/2 text-red-600 whitespace-nowrap" style="left: 20%;">
+                  $0 Break-Even
+                </span>
+                <span id="gaugeExpLabel" class="absolute -translate-x-1/2 text-slate-900 whitespace-nowrap" style="left: 58%;">
+                  Expected: +$251.84
+                </span>
+              </div>
+
+              <!-- Gauge Track -->
+              <div class="relative h-8 bg-slate-100 rounded-xl border border-slate-200 flex items-center mt-1 overflow-visible">
+                <!-- Subtle Loss Zone Shading to the left of $0 -->
+                <div
+                  id="gaugeLossZone"
+                  class="absolute top-0 bottom-0 left-0 bg-red-50/70 rounded-l-xl pointer-events-none"
+                  style="width: 20%;"
+                ></div>
+
+                <!-- 95% Confidence Interval Bar -->
+                <div
+                  id="gaugeCiBar"
+                  class="absolute h-4 rounded-md bg-emerald-500/25 border-2 border-emerald-600 z-10 transition-all duration-300"
+                  style="left: 36%; width: 52%;"
+                ></div>
+
+                <!-- Bold Vertical Red Dashed $0 Break-Even Line -->
+                <div
+                  id="gaugeZeroLine"
+                  class="absolute -top-1.5 -bottom-1.5 border-l-2 border-dashed border-red-600 z-20"
+                  style="left: 20%;"
+                  title="$0 Break-Even Line"
+                ></div>
+
+                <!-- Expected Point Gain Marker Dot -->
+                <div
+                  id="gaugeExpDot"
+                  class="absolute w-4 h-4 rounded-full bg-slate-900 border-2 border-white shadow-md -translate-x-1/2 z-30 transition-all duration-300"
+                  style="left: 58%;"
+                  title="Expected Monthly Revenue Gain"
+                ></div>
+              </div>
+
+              <!-- Bottom Axis Scale -->
+              <div class="flex justify-between text-[11px] text-slate-400 tabular-nums mt-1.5">
+                <span id="gaugeAxisMin">-$120/mo</span>
+                <span>95% Confidence Interval</span>
+                <span id="gaugeAxisMax">+$560/mo</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Plain-English Risk Explanation Box -->
+          <div id="ciPlainEnglishBox" class="mt-4 rounded-xl p-3.5 bg-emerald-50/70 border border-emerald-200/80 text-xs text-slate-700 leading-relaxed">
+            In <strong>998 out of 1,000</strong> bootstrap resamples, cutting <strong>bed1</strong> to <strong>$33.99</strong> increases monthly revenue—with 95% of outcomes landing between <strong>+$104.68/mo</strong> and <strong>+$476.73/mo</strong>.
+          </div>
+        </div>
+      </section>
+
+      <!-- Row 4: Conditional R Statistical Engine & Portfolio Benchmark Panel -->
+      <section class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <!-- Compact Summary Bar (Always visible; acts as header when expanded) -->
+        <div class="px-5 py-3.5 bg-slate-50/80 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2.5 text-xs">
+            <span class="inline-flex items-center gap-1.5 font-bold text-slate-800">
+              <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+              R Statistical Engine &amp; Portfolio Benchmark
+            </span>
+            <span class="hidden sm:inline text-slate-300">|</span>
+            <span id="compactModelSummary" class="text-slate-600 tabular-nums">
+              Elasticity b = -4.9483 (p = 0.0003, R² = 0.625, n = 16 mos) · Dataset Elastic Group (n = 28 SKUs): Median Lift +$631.14/mo (p &lt; 0.0001)
+            </span>
+          </div>
+
+          <button
+            id="btnToggleModelPanel"
+            type="button"
+            onclick="toggleViewMode()"
+            class="text-xs font-semibold text-blue-600 hover:text-blue-700 underline-offset-2 hover:underline cursor-pointer shrink-0"
+          >
+            Show Full R Diagnostics
+          </button>
+        </div>
+
+        <!-- Expanded R Model Details (Shown when 'R Model Details' is active) -->
+        <div id="expandedModelContent" class="hidden p-5 border-t border-slate-200 space-y-4">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <!-- R Regression Specification & SKU Diagnostics -->
+            <div class="lg:col-span-7 bg-slate-900 text-slate-100 rounded-xl p-4 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <span class="text-[11px] font-semibold uppercase tracking-wider text-blue-400">
+                    Per-SKU Log-Log Regression (Untitled_2.Rmd)
+                  </span>
+                  <span id="rObsBadge" class="text-[11px] font-mono-code text-slate-400">
+                    n = 16 months
+                  </span>
+                </div>
+                <code class="block font-mono-code text-xs sm:text-[13px] text-emerald-300 bg-slate-950/80 px-3 py-2 rounded-lg border border-slate-800 overflow-x-auto">
+                  lm(log(qty) ~ log(unit_price) + log(best_price))
+                </code>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3.5 border-t border-slate-800 tabular-nums">
+                <div>
+                  <div class="text-[11px] text-slate-400">Elasticity (b_raw)</div>
+                  <div id="rDiagElasticity" class="font-mono-code text-sm font-bold text-white mt-0.5">-4.9483</div>
+                </div>
+                <div>
+                  <div class="text-[11px] text-slate-400">t-statistic</div>
+                  <div id="rDiagTStat" class="font-mono-code text-sm font-bold text-white mt-0.5">-4.83</div>
+                </div>
+                <div>
+                  <div class="text-[11px] text-slate-400">p-value</div>
+                  <div id="rDiagPVal" class="font-mono-code text-sm font-bold text-emerald-400 mt-0.5">0.0003</div>
+                </div>
+                <div>
+                  <div class="text-[11px] text-slate-400">Model R²</div>
+                  <div id="rDiagR2" class="font-mono-code text-sm font-bold text-blue-300 mt-0.5">0.625</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Portfolio-Level Bootstrap Summary -->
+            <div class="lg:col-span-5 bg-blue-50/60 rounded-xl p-4 border border-blue-200/80 flex flex-col justify-between">
+              <div>
+                <div class="text-[11px] font-bold uppercase tracking-wider text-blue-700 mb-1.5">
+                  Dataset-Level Bootstrap Validation
+                </div>
+                <p class="text-xs sm:text-[13px] font-semibold text-slate-900 leading-relaxed tabular-nums">
+                  Elastic Group (n = 28 SKUs, 10,000 bootstrap runs): Median Revenue Lift +$631.14/mo · 95% CI [$289.32, $2,298.48] · p &lt; 0.0001
+                </p>
+              </div>
+              <p class="text-[11px] text-slate-600 mt-3 pt-2.5 border-t border-blue-200/60 leading-relaxed">
+                Pricing rule: Elastic SKUs (<span class="font-mono-code">b &lt; -1</span>) receive a 15% price cut to expand volume; Inelastic SKUs (<span class="font-mono-code">b ≥ -1</span>) receive a 15% price lift to expand unit margin.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // EXACT VERIFIED DATA FROM retail_price.csv
+    const PRODUCTS = [
+      {"product_id":"bed1","category":"bed_bath_table","n_obs":16,"current_price":39.99,"current_qty":7.0,"best_comp_price":39.99,"b_raw":-4.9483,"elasticity":-4.95,"t_stat_b":-4.83,"p_val_b":0.0003,"r2":0.625,"strategy":"elastic","recommended_price":33.99,"predicted_qty":15.6,"curr_rev":279.93,"pred_rev":531.77,"expected_rev_gain":251.84,"expected_rev_pct":90.0,"ci_low":104.68,"ci_high":476.73,"prob_gain":99.8},
+      {"product_id":"watches1","category":"watches_gifts","n_obs":17,"current_price":179.9,"current_qty":9.0,"best_comp_price":108.0,"b_raw":-4.4117,"elasticity":-4.41,"t_stat_b":-3.18,"p_val_b":0.0067,"r2":0.457,"strategy":"elastic","recommended_price":152.91,"predicted_qty":18.4,"curr_rev":1619.1,"pred_rev":2818.86,"expected_rev_gain":1199.76,"expected_rev_pct":74.1,"ci_low":302.68,"ci_high":2413.79,"prob_gain":99.5},
+      {"product_id":"perfumery2","category":"perfumery","n_obs":13,"current_price":118.05,"current_qty":8.0,"best_comp_price":56.99,"b_raw":-10.1749,"elasticity":-10.17,"t_stat_b":-6.9,"p_val_b":0.0,"r2":0.851,"strategy":"elastic","recommended_price":100.34,"predicted_qty":41.8,"curr_rev":944.4,"pred_rev":4194.96,"expected_rev_gain":3250.56,"expected_rev_pct":344.2,"ci_low":1792.74,"ci_high":4699.09,"prob_gain":99.9},
+      {"product_id":"furniture2","category":"furniture_decor","n_obs":13,"current_price":75.0,"current_qty":44.0,"best_comp_price":36.85,"b_raw":-10.0481,"elasticity":-10.05,"t_stat_b":-4.32,"p_val_b":0.0015,"r2":0.666,"strategy":"elastic","recommended_price":63.75,"predicted_qty":225.2,"curr_rev":3300.0,"pred_rev":14359.44,"expected_rev_gain":11059.44,"expected_rev_pct":335.1,"ci_low":5360.27,"ci_high":16419.95,"prob_gain":100.0},
+      {"product_id":"garden1","category":"garden_tools","n_obs":18,"current_price":106.25,"current_qty":6.0,"best_comp_price":54.5,"b_raw":-4.5812,"elasticity":-4.58,"t_stat_b":-2.68,"p_val_b":0.017,"r2":0.441,"strategy":"elastic","recommended_price":90.31,"predicted_qty":12.6,"curr_rev":637.47,"pred_rev":1140.84,"expected_rev_gain":503.37,"expected_rev_pct":79.0,"ci_low":-3.16,"ci_high":1590.79,"prob_gain":97.3},
+      {"product_id":"watches8","category":"watches_gifts","n_obs":10,"current_price":162.72,"current_qty":11.0,"best_comp_price":105.32,"b_raw":-3.5762,"elasticity":-3.58,"t_stat_b":-1.94,"p_val_b":0.094,"r2":0.615,"strategy":"elastic","recommended_price":138.31,"predicted_qty":19.7,"curr_rev":1789.95,"pred_rev":2720.62,"expected_rev_gain":930.67,"expected_rev_pct":52.0,"ci_low":-690.7,"ci_high":8281.83,"prob_gain":82.7},
+      {"product_id":"watches7","category":"watches_gifts","n_obs":12,"current_price":339.0,"current_qty":6.0,"best_comp_price":108.0,"b_raw":-2.5072,"elasticity":-2.51,"t_stat_b":-1.75,"p_val_b":0.1145,"r2":0.439,"strategy":"elastic","recommended_price":288.15,"predicted_qty":9.0,"curr_rev":2034.0,"pred_rev":2598.54,"expected_rev_gain":564.54,"expected_rev_pct":27.8,"ci_low":-784.87,"ci_high":1741.98,"prob_gain":78.8},
+      {"product_id":"garden3","category":"garden_tools","n_obs":18,"current_price":102.12,"current_qty":7.5,"best_comp_price":54.5,"b_raw":-3.1866,"elasticity":-3.19,"t_stat_b":-1.57,"p_val_b":0.1374,"r2":0.195,"strategy":"elastic","recommended_price":86.8,"predicted_qty":12.6,"curr_rev":765.9,"pred_rev":1092.71,"expected_rev_gain":326.81,"expected_rev_pct":42.7,"ci_low":-225.63,"ci_high":1126.82,"prob_gain":88.2},
+      {"product_id":"furniture1","category":"furniture_decor","n_obs":13,"current_price":36.85,"current_qty":12.0,"best_comp_price":36.85,"b_raw":-4.4567,"elasticity":-4.46,"t_stat_b":-1.57,"p_val_b":0.1452,"r2":0.183,"strategy":"elastic","recommended_price":31.33,"predicted_qty":24.8,"curr_rev":442.25,"pred_rev":775.62,"expected_rev_gain":333.37,"expected_rev_pct":75.4,"ci_low":-115.18,"ci_high":1622.67,"prob_gain":90.6},
+      {"product_id":"health7","category":"health_beauty","n_obs":20,"current_price":58.99,"current_qty":9.5,"best_comp_price":23.99,"b_raw":-5.412,"elasticity":-5.41,"t_stat_b":-1.27,"p_val_b":0.2229,"r2":0.248,"strategy":"elastic","recommended_price":50.14,"predicted_qty":22.9,"curr_rev":560.4,"pred_rev":1147.91,"expected_rev_gain":587.5,"expected_rev_pct":104.8,"ci_low":-216.25,"ci_high":2788.43,"prob_gain":84.8},
+      {"product_id":"watches2","category":"watches_gifts","n_obs":15,"current_price":145.99,"current_qty":8.0,"best_comp_price":108.0,"b_raw":-3.8058,"elasticity":-3.81,"t_stat_b":-1.15,"p_val_b":0.271,"r2":0.102,"strategy":"elastic","recommended_price":124.1,"predicted_qty":14.8,"curr_rev":1167.95,"pred_rev":1842.73,"expected_rev_gain":674.78,"expected_rev_pct":57.8,"ci_low":-384.05,"ci_high":3131.61,"prob_gain":86.6},
+      {"product_id":"cool1","category":"cool_stuff","n_obs":15,"current_price":99.99,"current_qty":4.0,"best_comp_price":99.99,"b_raw":-0.6967,"elasticity":-0.7,"t_stat_b":-0.13,"p_val_b":0.8989,"r2":0.197,"strategy":"inelastic","recommended_price":114.99,"predicted_qty":3.6,"curr_rev":399.96,"pred_rev":417.28,"expected_rev_gain":17.32,"expected_rev_pct":4.3,"ci_low":-137.77,"ci_high":208.33,"prob_gain":61.2}
+    ];
+
+    // Application State
+    let selectedProductId = 'bed1';
+    let strategyFilter = 'all'; // 'all' | 'elastic' | 'inelastic'
+    let simulatedPrice = 33.99;
+    let viewMode = 'business'; // 'business' | 'model'
+
+    // Formatting Helpers
+    function formatMoney(val, decimals = 2) {
+      return '$' + Math.abs(val).toLocaleString('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      });
+    }
+
+    function formatSignedMoney(val, decimals = 2) {
+      const prefix = val >= 0 ? '+$' : '-$';
+      return prefix + Math.abs(val).toLocaleString('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      });
+    }
+
+    function formatSignedPct(val, decimals = 1) {
+      const prefix = val >= 0 ? '+' : '';
+      return prefix + val.toFixed(decimals) + '%';
+    }
+
+    function getActiveProduct() {
+      return PRODUCTS.find(p => p.product_id === selectedProductId) || PRODUCTS[0];
+    }
+
+    // Strategy Filter Controls
+    function setStrategyFilter(filter) {
+      strategyFilter = filter;
+      const pills = {
+        all: document.getElementById('filterAll'),
+        elastic: document.getElementById('filterElastic'),
+        inelastic: document.getElementById('filterInelastic')
+      };
+
+      Object.keys(pills).forEach(key => {
+        if (key === filter) {
+          pills[key].className = 'flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all bg-blue-600 text-white shadow-xs cursor-pointer';
+        } else {
+          pills[key].className = 'flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 cursor-pointer';
+        }
+      });
+
+      renderSidebarList();
+    }
+
+    // Render Left Sidebar Product Cards
+    function renderSidebarList() {
+      const container = document.getElementById('skuListContainer');
+      container.innerHTML = '';
+
+      const filtered = PRODUCTS.filter(p => {
+        if (strategyFilter === 'all') return true;
+        return p.strategy === strategyFilter;
+      });
+
+      filtered.forEach(sku => {
+        const isSelected = sku.product_id === selectedProductId;
+        const isElastic = sku.strategy === 'elastic';
+
+        const strategyText = isElastic ? 'Cut Price -15%' : 'Raise Price +15%';
+        const strategyPillClass = isElastic
+          ? 'bg-blue-50 text-blue-700 border-blue-200'
+          : 'bg-indigo-50 text-indigo-700 border-indigo-200';
+
+        const cardClass = isSelected
+          ? 'border-blue-600 bg-blue-50/50 ring-1 ring-blue-600'
+          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70';
+
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.onclick = () => selectProduct(sku.product_id);
+        card.className = `w-full text-left p-3 rounded-xl border transition-all cursor-pointer ${cardClass}`;
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="text-sm font-extrabold text-slate-900">${sku.product_id}</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500 truncate">
+                ${sku.category}
+              </span>
+            </div>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${strategyPillClass}">
+              ${strategyText}
+            </span>
+          </div>
+          <div class="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100 text-xs tabular-nums">
+            <span class="text-slate-600 font-medium">
+              ${formatMoney(sku.current_price)} <span class="text-slate-400">→</span> <strong class="text-slate-900">${formatMoney(sku.recommended_price)}</strong>
+            </span>
+            <span class="font-bold text-emerald-600">
+              ${formatSignedMoney(sku.expected_rev_gain)} / mo
+            </span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // Select a SKU and initialize slider bounds
+    function selectProduct(productId) {
+      selectedProductId = productId;
+      const sku = getActiveProduct();
+      simulatedPrice = sku.recommended_price;
+
+      const minBound = +(sku.current_price * 0.85).toFixed(2);
+      const maxBound = +(sku.current_price * 1.15).toFixed(2);
+
+      const slider = document.getElementById('priceSlider');
+      slider.min = minBound;
+      slider.max = maxBound;
+      slider.step = 0.05;
+      slider.value = simulatedPrice;
+
+      document.getElementById('sliderMinText').textContent = `-15% (${formatMoney(minBound)})`;
+      document.getElementById('sliderMidText').textContent = `Current (${formatMoney(sku.current_price)})`;
+      document.getElementById('sliderMaxText').textContent = `+15% (${formatMoney(maxBound)})`;
+
+      renderSidebarList();
+      renderWorkspace();
+    }
+
+    // Slider & Quick-Snap Handlers
+    function onSliderChange(rawVal) {
+      simulatedPrice = parseFloat(rawVal);
+      renderSimulatorSection();
+    }
+
+    function snapToCurrent() {
+      const sku = getActiveProduct();
+      simulatedPrice = sku.current_price;
+      document.getElementById('priceSlider').value = simulatedPrice;
+      renderSimulatorSection();
+    }
+
+    function resetToOptimal() {
+      const sku = getActiveProduct();
+      simulatedPrice = sku.recommended_price;
+      document.getElementById('priceSlider').value = simulatedPrice;
+      renderSimulatorSection();
+    }
+
+    // View Toggle Handlers
+    function setViewMode(mode) {
+      viewMode = mode;
+      const btnBiz = document.getElementById('btnBusinessView');
+      const btnMod = document.getElementById('btnModelView');
+      const expandedPanel = document.getElementById('expandedModelContent');
+      const toggleLink = document.getElementById('btnToggleModelPanel');
+
+      if (mode === 'business') {
+        btnBiz.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-900 shadow-sm cursor-pointer';
+        btnMod.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 hover:text-slate-900 cursor-pointer';
+        expandedPanel.classList.add('hidden');
+        toggleLink.textContent = 'Show Full R Diagnostics';
+      } else {
+        btnMod.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white text-slate-900 shadow-sm cursor-pointer';
+        btnBiz.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 hover:text-slate-900 cursor-pointer';
+        expandedPanel.classList.remove('hidden');
+        toggleLink.textContent = 'Hide R Diagnostics';
+      }
+    }
+
+    function toggleViewMode() {
+      setViewMode(viewMode === 'business' ? 'model' : 'business');
+    }
+
+    // Render Entire Right Workspace for Active SKU
+    function renderWorkspace() {
+      const sku = getActiveProduct();
+      const isElastic = sku.strategy === 'elastic';
+      const recPricePct = ((sku.recommended_price - sku.current_price) / sku.current_price) * 100;
+      const recDemandPct = ((sku.predicted_qty - sku.current_qty) / sku.current_qty) * 100;
+
+      // Row 1: Executive Summary Header
+      document.getElementById('execSkuTitle').textContent = sku.product_id;
+      document.getElementById('execCategoryTag').textContent = sku.category;
+
+      const stratBadge = document.getElementById('execStrategyBadge');
+      stratBadge.textContent = isElastic ? 'Cut Price -15%' : 'Raise Price +15%';
+      stratBadge.className = isElastic
+        ? 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200'
+        : 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200';
+
+      // Risk Level Badge Logic
+      const riskBadge = document.getElementById('execRiskBadge');
+      if (sku.ci_low > 0 || sku.prob_gain >= 95) {
+        riskBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 tabular-nums';
+        riskBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span>Low Risk · ${sku.prob_gain.toFixed(1)}% Win Prob`;
+      } else if (sku.prob_gain >= 75) {
+        riskBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 tabular-nums';
+        riskBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span>Moderate Risk · ${sku.prob_gain.toFixed(1)}% Win Prob`;
+      } else {
+        riskBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200 tabular-nums';
+        riskBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-600"></span>High Variance · ${sku.prob_gain.toFixed(1)}% Win Prob`;
+      }
+
+      // 1-Sentence Plain-English Action Recommendation
+      const actionSentence = document.getElementById('execActionSentence');
+      if (isElastic) {
+        actionSentence.textContent = `Cut price by ${Math.abs(recPricePct).toFixed(1)}% from ${formatMoney(sku.current_price)} to ${formatMoney(sku.recommended_price)} to win price-sensitive shoppers—projected volume increases ${formatSignedPct(recDemandPct)} for ${formatSignedMoney(sku.expected_rev_gain)}/mo in net revenue.`;
+      } else {
+        actionSentence.textContent = `Raise price by ${recPricePct.toFixed(1)}% from ${formatMoney(sku.current_price)} to ${formatMoney(sku.recommended_price)} to capture higher unit margin—demand holds steady (${formatSignedPct(recDemandPct)}) for ${formatSignedMoney(sku.expected_rev_gain)}/mo in net revenue.`;
+      }
+
+      // Row 2: 4 KPI Metric Cards
+      document.getElementById('kpiCurrentPrice').textContent = formatMoney(sku.current_price);
+      document.getElementById('kpiCompSubtext').textContent = `Lowest competitor: ${formatMoney(sku.best_comp_price)}`;
+
+      document.getElementById('kpiRecPrice').textContent = formatMoney(sku.recommended_price);
+      document.getElementById('kpiRecSubtext').textContent = `${formatSignedPct(recPricePct)} within ±15% guardrail`;
+
+      document.getElementById('kpiDemandChange').textContent = `${sku.current_qty.toFixed(1)} → ${sku.predicted_qty.toFixed(1)} units/mo`;
+      document.getElementById('kpiDemandSubtext').textContent = `${formatSignedPct(recDemandPct)} projected volume`;
+
+      document.getElementById('kpiRevImpact').textContent = `${formatSignedMoney(sku.expected_rev_gain)} / mo`;
+      document.getElementById('kpiRevSubtext').textContent = `${formatSignedPct(sku.expected_rev_pct)} monthly lift`;
+
+      // Row 3 Left: Simulator
+      document.getElementById('simElasticityPill').textContent = `b = ${sku.elasticity.toFixed(2)}`;
+      document.getElementById('btnSnapRecommended').textContent = isElastic
+        ? 'Model Recommended (-15%)'
+        : 'Model Recommended (+15%)';
+      renderSimulatorSection();
+
+      // Row 3 Right: 95% Bootstrap Confidence Range Gauge
+      renderConfidenceSection(sku);
+
+      // Row 4: R Statistical Engine & Diagnostics
+      const pValFormatted = sku.p_val_b < 0.0001 ? '< 0.0001' : sku.p_val_b.toFixed(4);
+      document.getElementById('compactModelSummary').textContent =
+        `Elasticity b = ${sku.b_raw.toFixed(4)} (p = ${pValFormatted}, R² = ${sku.r2.toFixed(3)}, n = ${sku.n_obs} mos) · Elastic Group (n = 28 SKUs): Median Lift +$631.14/mo (p < 0.0001)`;
+
+      document.getElementById('rObsBadge').textContent = `n = ${sku.n_obs} months`;
+      document.getElementById('rDiagElasticity').textContent = sku.b_raw.toFixed(4);
+      document.getElementById('rDiagTStat').textContent = sku.t_stat_b.toFixed(2);
+      document.getElementById('rDiagPVal').textContent = pValFormatted;
+      document.getElementById('rDiagR2').textContent = sku.r2.toFixed(3);
+    }
+
+    // Real-Time Demand & Revenue Simulator Math
+    function renderSimulatorSection() {
+      const sku = getActiveProduct();
+
+      // Exact R Log-Log Formula: Q_sim = current_qty * (P_sim / current_price)^b_raw
+      const qSim = sku.current_qty * Math.pow(simulatedPrice / sku.current_price, sku.b_raw);
+      const revCurr = sku.current_price * sku.current_qty;
+      const revSim = simulatedPrice * qSim;
+      const revDiff = revSim - revCurr;
+      const revPct = (revDiff / revCurr) * 100;
+      const pricePct = ((simulatedPrice - sku.current_price) / sku.current_price) * 100;
+      const demandPct = ((qSim - sku.current_qty) / sku.current_qty) * 100;
+
+      document.getElementById('simLivePrice').textContent = formatMoney(simulatedPrice);
+      const pctBadge = document.getElementById('simLivePctBadge');
+      pctBadge.textContent = formatSignedPct(pricePct);
+      pctBadge.className = Math.abs(pricePct) < 0.05
+        ? 'px-2 py-0.5 rounded-md text-xs font-bold tabular-nums bg-slate-100 text-slate-700'
+        : 'px-2 py-0.5 rounded-md text-xs font-bold tabular-nums bg-blue-50 text-blue-700';
+
+      // Horizontal Comparison Bars
+      const maxRev = Math.max(revCurr, revSim) * 1.08;
+      const currWidth = Math.min(100, Math.max(6, (revCurr / maxRev) * 100));
+      const simWidth = Math.min(100, Math.max(6, (revSim / maxRev) * 100));
+
+      document.getElementById('barCurrRevLabel').textContent = `${formatMoney(revCurr)} / mo`;
+      document.getElementById('barCurrRevFill').style.width = `${currWidth.toFixed(1)}%`;
+
+      document.getElementById('barSimRevLabel').textContent = `${formatMoney(revSim)} / mo`;
+
+      const simPctBadge = document.getElementById('barSimPctBadge');
+      const simFill = document.getElementById('barSimRevFill');
+      simPctBadge.textContent = `${formatSignedMoney(revDiff)} (${formatSignedPct(revPct)})`;
+
+      if (revDiff >= -0.01) {
+        simPctBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700';
+        simFill.className = 'h-full bg-emerald-600 rounded-full transition-all duration-150';
+      } else {
+        simPctBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-700';
+        simFill.className = 'h-full bg-red-600 rounded-full transition-all duration-150';
+      }
+      simFill.style.width = `${simWidth.toFixed(1)}%`;
+
+      document.getElementById('simLiveDemandText').textContent =
+        `${qSim.toFixed(1)} units/mo (${formatSignedPct(demandPct)})`;
+    }
+
+    // 95% Bootstrap Confidence Range Gauge & Plain-English Explanation
+    function renderConfidenceSection(sku) {
+      const winPill = document.getElementById('ciWinProbPill');
+      winPill.textContent = `${sku.prob_gain.toFixed(1)}% Win Prob`;
+
+      if (sku.ci_low > 0 || sku.prob_gain >= 95) {
+        winPill.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0';
+      } else if (sku.prob_gain >= 75) {
+        winPill.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums bg-amber-50 text-amber-700 border border-amber-200 shrink-0';
+      } else {
+        winPill.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums bg-red-50 text-red-700 border border-red-200 shrink-0';
+      }
+
+      const floorEl = document.getElementById('ciFloorVal');
+      floorEl.textContent = formatSignedMoney(sku.ci_low);
+      floorEl.className = sku.ci_low >= 0
+        ? 'text-sm font-bold text-emerald-700 mt-0.5'
+        : 'text-sm font-bold text-amber-700 mt-0.5';
+
+      document.getElementById('ciExpectedVal').textContent = formatSignedMoney(sku.expected_rev_gain);
+      document.getElementById('ciCeilingVal').textContent = formatSignedMoney(sku.ci_high);
+
+      // Proportional Axis Scale including 0, ci_low, expected_rev_gain, ci_high
+      const minVal = Math.min(0, sku.ci_low);
+      const maxVal = Math.max(0, sku.ci_high, sku.expected_rev_gain);
+      const span = Math.max(100, maxVal - minVal);
+      const pad = span * 0.14;
+
+      const axisMin = minVal - pad;
+      const axisMax = maxVal + pad;
+      const totalRange = axisMax - axisMin;
+
+      const toPct = (v) => {
+        const pct = ((v - axisMin) / totalRange) * 100;
+        return Math.min(96, Math.max(4, pct));
+      };
+
+      const zeroPct = toPct(0);
+      const lowPct = toPct(sku.ci_low);
+      const highPct = toPct(sku.ci_high);
+      const expPct = toPct(sku.expected_rev_gain);
+
+      document.getElementById('gaugeZeroLine').style.left = `${zeroPct.toFixed(1)}%`;
+      document.getElementById('gaugeZeroLabel').style.left = `${zeroPct.toFixed(1)}%`;
+      document.getElementById('gaugeLossZone').style.width = `${zeroPct.toFixed(1)}%`;
+
+      const ciBar = document.getElementById('gaugeCiBar');
+      ciBar.style.left = `${lowPct.toFixed(1)}%`;
+      ciBar.style.width = `${Math.max(3, highPct - lowPct).toFixed(1)}%`;
+
+      if (sku.ci_low > 0) {
+        ciBar.className = 'absolute h-4 rounded-md bg-emerald-500/25 border-2 border-emerald-600 z-10 transition-all duration-300';
+      } else if (sku.prob_gain >= 75) {
+        ciBar.className = 'absolute h-4 rounded-md bg-amber-500/25 border-2 border-amber-500 z-10 transition-all duration-300';
+      } else {
+        ciBar.className = 'absolute h-4 rounded-md bg-blue-500/20 border-2 border-blue-600 z-10 transition-all duration-300';
+      }
+
+      document.getElementById('gaugeExpDot').style.left = `${expPct.toFixed(1)}%`;
+      const expLabel = document.getElementById('gaugeExpLabel');
+      expLabel.style.left = `${Math.min(86, Math.max(18, expPct)).toFixed(1)}%`;
+      expLabel.textContent = `Expected: ${formatSignedMoney(sku.expected_rev_gain)}`;
+
+      document.getElementById('gaugeAxisMin').textContent = `${formatSignedMoney(axisMin, 0)}/mo`;
+      document.getElementById('gaugeAxisMax').textContent = `${formatSignedMoney(axisMax, 0)}/mo`;
+
+      // Plain-English Risk Explanation Box
+      const winCount = Math.round(sku.prob_gain * 10);
+      const actionVerb = sku.strategy === 'elastic' ? 'cutting' : 'raising';
+      const box = document.getElementById('ciPlainEnglishBox');
+
+      if (sku.ci_low > 0) {
+        box.className = 'mt-4 rounded-xl p-3.5 bg-emerald-50/70 border border-emerald-200/80 text-xs text-slate-700 leading-relaxed';
+      } else if (sku.prob_gain >= 75) {
+        box.className = 'mt-4 rounded-xl p-3.5 bg-amber-50/70 border border-amber-200/80 text-xs text-slate-700 leading-relaxed';
+      } else {
+        box.className = 'mt-4 rounded-xl p-3.5 bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed';
+      }
+
+      box.innerHTML = `In <strong>${winCount.toLocaleString('en-US')} out of 1,000</strong> bootstrap resamples, ${actionVerb} <strong>${sku.product_id}</strong> to <strong>${formatMoney(sku.recommended_price)}</strong> increases monthly revenue—with 95% of outcomes falling between <strong>${formatSignedMoney(sku.ci_low)}/mo</strong> and <strong>${formatSignedMoney(sku.ci_high)}/mo</strong>.`;
+    }
+
+    // Boot Application with bed1 selected by default
+    document.addEventListener('DOMContentLoaded', () => {
+      selectProduct('bed1');
+    });
+  </script>
+</body>
+</html>
